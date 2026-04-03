@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Class of 2026 College Map</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f8fafc;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+            z-index: 10;
+        }
+        
+        /* Custom Map Marker */
+        .custom-cluster-icon {
+            background: transparent;
+            transition: transform 0.2s;
+        }
+        
+        .custom-cluster-icon:hover {
+            transform: scale(1.15);
+            cursor: pointer;
+        }
+
+        /* Leaflet Popup Styling */
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            padding: 0;
+            overflow: hidden;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .leaflet-popup-content {
+            margin: 0;
+            width: 220px !important;
+        }
+        .popup-header {
+            background-color: #1e293b;
+            color: white;
+            padding: 12px 16px;
+            font-weight: 600;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .popup-body {
+            padding: 12px 16px;
+            max-height: 150px;
+            overflow-y: auto;
+            background: white;
+        }
+        .popup-student {
+            padding: 4px 0;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 14px;
+            color: #334155;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .popup-student:last-child {
+            border-bottom: none;
+        }
+
+        /* Sidebar scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9; 
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <!-- Sidebar -->
+    <div class="w-full md:w-80 lg:w-96 bg-white shadow-xl z-20 flex flex-col h-1/3 md:h-full flex-shrink-0">
+        <!-- Header -->
+        <div class="bg-slate-900 text-white p-6 shadow-md relative">
+            <h1 class="text-2xl font-bold tracking-tight mb-1"><i class="fa-solid fa-graduation-cap mr-2"></i>Class of 2026</h1>
+            <p class="text-slate-300 text-sm">College Destinations Map</p>
+            
+            <button id="open-edit-modal-btn" class="absolute top-6 right-6 text-slate-300 hover:text-white transition-colors flex items-center justify-center w-8 h-8 rounded-full hover:bg-slate-700" title="Edit Data">
+                <i class="fa-solid fa-pen-to-square"></i>
+            </button>
+
+            <div class="mt-4 flex gap-4 text-sm font-medium">
+                <div class="bg-slate-800 px-3 py-1.5 rounded-lg flex-1 text-center">
+                    <span id="total-students" class="text-blue-400 font-bold text-lg">0</span>
+                    <span class="block text-xs text-slate-400">Students</span>
+                </div>
+                <div class="bg-slate-800 px-3 py-1.5 rounded-lg flex-1 text-center">
+                    <span id="total-colleges" class="text-emerald-400 font-bold text-lg">0</span>
+                    <span class="block text-xs text-slate-400">Colleges</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search -->
+        <div class="p-4 border-b border-slate-100">
+            <div class="relative">
+                <i class="fa-solid fa-search absolute left-3 top-3 text-slate-400 text-sm"></i>
+                <input type="text" id="searchInput" placeholder="Search school or student..." 
+                    class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+            </div>
+        </div>
+
+        <!-- List -->
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-2" id="school-list">
+            <!-- Items injected by JS -->
+        </div>
+    </div>
+
+    <!-- Map Container -->
+    <div class="flex-1 relative h-2/3 md:h-full bg-slate-100">
+        <div id="map"></div>
+    </div>
+
+    <!-- Edit Data Modal -->
+    <div id="edit-modal" class="fixed inset-0 bg-slate-900/60 hidden z-[1000] flex items-center justify-center backdrop-blur-sm opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl w-11/12 max-w-2xl overflow-hidden flex flex-col max-h-[90vh] transform scale-95 transition-transform duration-300" id="edit-modal-panel">
+            <div class="bg-slate-900 p-5 text-white flex justify-between items-center shadow-md z-10">
+                <h2 class="font-bold text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-database text-blue-400"></i> Manage Decisions Data
+                </h2>
+                <button id="edit-modal-close" class="hover:bg-white/20 p-2 rounded-full transition-colors w-8 h-8 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="p-4 bg-yellow-50 border-b border-yellow-100 text-yellow-800 text-sm px-6 flex items-start gap-3">
+                <i class="fa-solid fa-circle-info mt-0.5"></i>
+                <p>Changes are saved automatically to your browser. You can add new students to existing colleges, or add entirely new colleges at the bottom!</p>
+            </div>
+
+            <div class="p-6 overflow-y-auto custom-scrollbar bg-slate-50 relative flex-1" id="edit-colleges-container">
+                <!-- Editor content injected here -->
+            </div>
+
+            <div class="bg-white border-t border-slate-200 p-4 flex justify-between items-center z-10">
+                <button id="reset-data-btn" class="text-sm text-red-500 hover:text-red-700 font-medium px-3 py-2 rounded transition-colors"><i class="fa-solid fa-rotate-left mr-1"></i> Factory Reset</button>
+                <button id="save-data-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium shadow-md transition-all"><i class="fa-solid fa-check mr-2"></i>Save & Reload Map</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Default dataset
+        const defaultCollegeData = [
+            { name: "NYU", domain: "nyu.edu", lat: 40.7295, lng: -73.9965, students: ["Ethan Hsu", "Chloe Yeh", "Derrick Huang", "Aaron Yang", "Kris", "Jocelyn", "Romano", "timothy lin", "Lucas Ko"] },
+            { name: "Cornell", domain: "cornell.edu", lat: 42.4534, lng: -76.4735, students: ["Felisha", "Grace", "Chloe Chen", "Veronica Huang", "Carolyn", "Kae"] },
+            { name: "Michigan", domain: "umich.edu", lat: 42.2780, lng: -83.7382, students: ["Jacquie", "Emma Leuekoed", "Vina", "Raegine", "Ethan Ma"] },
+            { name: "Northwestern", domain: "northwestern.edu", lat: 42.0565, lng: -87.6753, students: ["Maggie", "Allison", "Jordan", "Rex", "Sophie Lien"] },
+            { name: "BU", domain: "bu.edu", lat: 42.3505, lng: -71.1054, students: ["Chloe Lee", "James", "Erika", "Ann Liu", "Joanne"] },
+            { name: "UChicago", domain: "uchicago.edu", lat: 41.7886, lng: -87.5987, students: ["Ashley", "William Feung", "Valerie", "Iris Tsai"] },
+            { name: "USC", domain: "usc.edu", lat: 34.0224, lng: -118.2851, students: ["Leah", "Maddy", "Christen", "Jesse"] },
+            { name: "Berkeley", domain: "berkeley.edu", lat: 37.8715, lng: -122.2595, students: ["Aaron Lin", "Conroy", "Ethan Huang"] },
+            { name: "BC", domain: "bc.edu", lat: 42.3398, lng: -71.1691, students: ["Nina", "Nicholas Ko", "Alyson"] },
+            { name: "UIUC", domain: "illinois.edu", lat: 40.1020, lng: -88.2272, students: ["Josh", "Pollux Huang"] },
+            { name: "Stanford", domain: "stanford.edu", lat: 37.4275, lng: -122.1697, students: ["Zoe Shih", "Annabelle"] },
+            { name: "Harvard", domain: "harvard.edu", lat: 42.3770, lng: -71.1167, students: ["Sophie Hsu", "Alyssa"] },
+            { name: "JHU", domain: "jhu.edu", lat: 39.3299, lng: -76.6205, students: ["Phoebe", "Edward Lu"] },
+            { name: "Columbia", domain: "columbia.edu", lat: 40.8075, lng: -73.9626, students: ["Aaron Ong", "Winston"] },
+            { name: "Emory", domain: "emory.edu", lat: 33.7970, lng: -84.3222, students: ["Veronica", "Ryan Nien"] },
+            { name: "UPenn", domain: "upenn.edu", lat: 39.9522, lng: -75.1932, students: ["Jocelyn Liao", "Katie Liu"] },
+            { name: "USF", domain: "usfca.edu", lat: 37.7766, lng: -122.4507, students: ["Sawyer", "Kaiya Cooper"] },
+            { name: "Brown", domain: "brown.edu", lat: 41.8268, lng: -71.4025, students: ["Luna Lee", "Ariel Ting"] },
+            { name: "Barnard", domain: "barnard.edu", lat: 40.8095, lng: -73.9635, students: ["Ava", "Natalie Wu"] },
+            { name: "Wellesley", domain: "wellesley.edu", lat: 42.2936, lng: -71.3060, students: ["Sophie", "Addison"] },
+            { name: "CMU", domain: "cmu.edu", lat: 40.4428, lng: -79.9430, students: ["Jayden Chen", "Isabella Chen"] },
+            { name: "Syracuse", domain: "syr.edu", lat: 43.0392, lng: -76.1351, students: ["Ethan Chen", "Flo Schwall"] },
+            { name: "Tufts", domain: "tufts.edu", lat: 42.4085, lng: -71.1183, students: ["Ryan Chou", "Haluka"] },
+            { name: "Northeastern", domain: "northeastern.edu", lat: 42.3398, lng: -71.0892, students: ["Siri Yang", "Ally Go"] },
+            { name: "UT Austin", domain: "utexas.edu", lat: 30.2849, lng: -97.7341, students: ["Lisa"] },
+            { name: "UCLA", domain: "ucla.edu", lat: 34.0689, lng: -118.4452, students: ["Elyse"] },
+            { name: "UW Madison", domain: "wisc.edu", lat: 43.0766, lng: -89.4125, students: ["William train guy"] },
+            { name: "ASU", domain: "asu.edu", lat: 33.4242, lng: -111.9281, students: ["Brendan Hsu"] },
+            { name: "Yale", domain: "yale.edu", lat: 41.3163, lng: -72.9223, students: ["Aina"] },
+            { name: "Dartmouth", domain: "dartmouth.edu", lat: 43.7044, lng: -72.2887, students: ["Megan"] },
+            { name: "RIT", domain: "rit.edu", lat: 43.0838, lng: -77.6698, students: ["Theo"] },
+            { name: "Vanderbilt", domain: "vanderbilt.edu", lat: 36.1447, lng: -86.8027, students: ["Olivia"] },
+            { name: "GWU", domain: "gwu.edu", lat: 38.8997, lng: -77.0486, students: ["Alivia"] },
+            { name: "Rice", domain: "rice.edu", lat: 29.7174, lng: -95.4018, students: ["Myron"] },
+            { name: "UCSD", domain: "ucsd.edu", lat: 32.8801, lng: -117.2340, students: ["Laura Lee"] },
+            { name: "UNC", domain: "unc.edu", lat: 35.9049, lng: -79.0469, students: ["Ayden Chin"] },
+            { name: "UCI", domain: "uci.edu", lat: 33.6405, lng: -117.8443, students: ["Ann Liu"] }
+        ];
+
+        // Load data from LocalStorage or use default
+        let collegeData = [];
+        try {
+            const savedData = localStorage.getItem('classOf2026Data');
+            if (savedData) {
+                collegeData = JSON.parse(savedData);
+            } else {
+                collegeData = JSON.parse(JSON.stringify(defaultCollegeData)); // Deep copy
+            }
+        } catch (e) {
+            console.error("Failed to load local storage, using defaults");
+            collegeData = JSON.parse(JSON.stringify(defaultCollegeData));
+        }
+
+        // Sort data alphabetically by default
+        collegeData.sort((a, b) => b.students.length - a.students.length || a.name.localeCompare(b.name));
+
+        let map;
+        let markers = {};
+        let initialBounds = [];
+
+        // Initialize application
+        window.onload = function() {
+            initMap();
+            renderSidebar(collegeData);
+            updateStats();
+            setupSearch();
+            setupModals();
+        };
+
+        function initMap() {
+            // Center map roughly in the middle of the US
+            map = L.map('map', {
+                zoomControl: false, // Move zoom control
+                zoomSnap: 0.1,      // Allows fractional zoom for a perfect fit
+                wheelPxPerZoomLevel: 15 // Lower value makes scroll/trackpad zooming much faster (Default is 60)
+            }).setView([39.8283, -98.5795], 4.5);
+            
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            // Add clean CartoDB Positron base map
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            initialBounds = [];
+
+            // Add markers
+            collegeData.forEach(college => {
+                if (college.students.length === 0) return; // Skip empty colleges
+
+                const count = college.students.length;
+                
+                // Dynamic sizing based on student count
+                const size = count > 5 ? 42 : count > 2 ? 36 : 30;
+
+                const iconHtml = `
+                    <div class="relative w-full h-full bg-white rounded-full border-2 border-blue-500 shadow-md flex items-center justify-center">
+                        <img src="https://www.google.com/s2/favicons?domain=${college.domain}&sz=128" class="w-[70%] h-[70%] object-contain rounded-full z-10" onerror="this.style.display='none'">
+                        <i class="fa-solid fa-building-columns text-slate-300 absolute text-sm"></i>
+                        <div class="absolute -top-1 -right-2 bg-blue-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm z-20">
+                            ${count}
+                        </div>
+                    </div>
+                `;
+
+                const icon = L.divIcon({
+                    className: 'custom-cluster-icon',
+                    html: iconHtml,
+                    iconSize: [size, size],
+                    iconAnchor: [size/2, size/2]
+                });
+
+                const marker = L.marker([college.lat, college.lng], { icon: icon }).addTo(map);
+                initialBounds.push([college.lat, college.lng]);
+                
+                // Build popup HTML
+                let studentHtml = college.students.map(s => {
+                    // Give a special highlight to Josh
+                    if(s === "Josh") {
+                        return `<div class="popup-student font-bold text-blue-600 bg-blue-50 -mx-4 px-4 py-1"><i class="fa-solid fa-star text-yellow-400 text-xs"></i> ${s}</div>`;
+                    }
+                    return `<div class="popup-student"><i class="fa-solid fa-user text-slate-300 text-xs w-4"></i> ${s}</div>`;
+                }).join('');
+
+                const popupContent = `
+                    <div class="popup-header">
+                        <div class="relative w-6 h-6 flex-shrink-0 flex items-center justify-center bg-slate-800 rounded-full">
+                            <i class="fa-solid fa-building-columns text-slate-400 absolute text-xs"></i>
+                            <img src="https://www.google.com/s2/favicons?domain=${college.domain}&sz=64" class="w-6 h-6 rounded-full bg-white object-contain absolute z-10 border-2 border-white" onerror="this.style.display='none'">
+                        </div>
+                        <span>${college.name}</span>
+                    </div>
+                    <div class="popup-body custom-scrollbar">
+                        ${studentHtml}
+                    </div>
+                `;
+
+                marker.bindPopup(popupContent, {
+                    closeButton: false,
+                    offset: [0, -size/2 + 5]
+                });
+
+                let popupCloseTimeout;
+
+                // Add hover listener to show popup preview
+                marker.on('mouseover', function() {
+                    clearTimeout(popupCloseTimeout);
+                    marker.openPopup();
+                });
+
+                // Start hide timer when cursor leaves marker
+                marker.on('mouseout', function() {
+                    popupCloseTimeout = setTimeout(() => {
+                        marker.closePopup();
+                    }, 300); // 300ms gives you time to move the mouse into the popup
+                });
+
+                // Keep popup open if cursor enters the popup itself
+                marker.on('popupopen', function(e) {
+                    const popupNode = e.popup._container;
+                    if (popupNode) {
+                        popupNode.onmouseenter = () => {
+                            clearTimeout(popupCloseTimeout); // Cancel close if mouse is in popup
+                        };
+                        popupNode.onmouseleave = () => {
+                            popupCloseTimeout = setTimeout(() => {
+                                marker.closePopup();
+                            }, 300); // Close when mouse leaves the popup
+                        };
+                    }
+                });
+
+                // Add click listener to zoom in when the marker is clicked
+                marker.on('click', () => {
+                    map.flyTo([college.lat, college.lng], 10, {
+                        duration: 1.0,
+                        easeLinearity: 0.25
+                    });
+                });
+
+                // Store marker reference for sidebar clicking
+                markers[college.name] = marker;
+            });
+
+            // Adjust map to fit all markers nicely
+            if(initialBounds.length > 0) {
+                map.fitBounds(initialBounds, { padding: [20, 20] });
+            }
+
+            // Reset zoom when clicking empty map area
+            map.on('click', () => {
+                if(initialBounds.length > 0) {
+                    map.flyToBounds(initialBounds, {
+                        padding: [20, 20],
+                        duration: 1.0,
+                        easeLinearity: 0.25
+                    });
+                }
+            });
+        }
+
+        function renderSidebar(data) {
+            const listContainer = document.getElementById('school-list');
+            listContainer.innerHTML = '';
+
+            if (data.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center p-8 text-slate-400">
+                        <i class="fa-solid fa-ghost text-4xl mb-3 opacity-50"></i>
+                        <p>No matches found.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            data.forEach(college => {
+                if (college.students.length === 0) return;
+
+                const item = document.createElement('div');
+                item.className = 'group p-3 mb-2 bg-white hover:bg-blue-50 border border-slate-100 rounded-lg cursor-pointer transition-colors shadow-sm';
+                
+                item.innerHTML = `
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                            <div class="relative w-6 h-6 flex-shrink-0 flex items-center justify-center">
+                                <i class="fa-solid fa-building-columns text-blue-300 absolute text-sm"></i>
+                                <img src="https://www.google.com/s2/favicons?domain=${college.domain}&sz=64" class="w-6 h-6 rounded-sm object-contain absolute z-10 bg-white" onerror="this.style.display='none'">
+                            </div>
+                            ${college.name}
+                        </h3>
+                        <span class="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">
+                            ${college.students.length}
+                        </span>
+                    </div>
+                    <div class="text-sm text-slate-500 leading-relaxed pl-7">
+                        ${college.students.map(s => {
+                            if (s === "Josh") return `<span class="text-blue-600 font-semibold inline-flex items-center gap-1"><i class="fa-solid fa-star text-yellow-400 text-[10px]"></i>${s}</span>`;
+                            return s;
+                        }).join(', ')}
+                    </div>
+                `;
+
+                item.addEventListener('click', () => {
+                    const marker = markers[college.name];
+                    if (marker) {
+                        // Fly to location and open popup
+                        map.flyTo([college.lat, college.lng], 10, {
+                            duration: 1.5,
+                            easeLinearity: 0.25
+                        });
+                        
+                        // Wait a bit for flyTo to finish before opening popup
+                        setTimeout(() => {
+                            marker.openPopup();
+                        }, 1500);
+                    }
+                });
+
+                listContainer.appendChild(item);
+            });
+        }
+
+        function updateStats() {
+            const activeColleges = collegeData.filter(c => c.students.length > 0).length;
+            const totalStudents = collegeData.reduce((sum, college) => sum + college.students.length, 0);
+            
+            document.getElementById('total-colleges').textContent = activeColleges;
+            document.getElementById('total-students').textContent = totalStudents;
+        }
+
+        function setupSearch() {
+            const input = document.getElementById('searchInput');
+            input.addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                
+                const filteredData = collegeData.filter(college => {
+                    if (college.students.length === 0) return false;
+                    const matchSchool = college.name.toLowerCase().includes(term);
+                    const matchStudent = college.students.some(s => s.toLowerCase().includes(term));
+                    return matchSchool || matchStudent;
+                });
+                
+                renderSidebar(filteredData);
+            });
+        }
+
+        // --- Editor Logic ---
+        
+        let editorData = [];
+
+        function renderEditor() {
+            const container = document.getElementById('edit-colleges-container');
+            container.innerHTML = '';
+
+            editorData.forEach((college, colIndex) => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4";
+                
+                // Render students
+                const studentsHtml = college.students.map((student, studentIdx) => `
+                    <span class="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-1 rounded text-sm border border-slate-200 mb-1 mr-1">
+                        ${student}
+                        <button onclick="removeStudent(${colIndex}, ${studentIdx})" class="text-slate-400 hover:text-red-500 ml-1"><i class="fa-solid fa-xmark text-xs"></i></button>
+                    </span>
+                `).join('');
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-3 border-b border-slate-100 pb-2">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-lg">${college.name}</h3>
+                            <p class="text-xs text-slate-400">${college.domain} | Lat: ${college.lat}, Lng: ${college.lng}</p>
+                        </div>
+                        <button onclick="deleteCollege(${colIndex})" class="text-slate-400 hover:text-red-500 text-sm"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    <div class="mb-3">
+                        ${studentsHtml || '<span class="text-sm text-slate-400 italic">No students yet.</span>'}
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="add-student-input-${colIndex}" placeholder="Student Name" class="flex-1 border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" onkeypress="if(event.key === 'Enter') addStudent(${colIndex})">
+                        <button onclick="addStudent(${colIndex})" class="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded text-sm transition-colors">Add</button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+
+            // Add new college form at the bottom
+            const newColCard = document.createElement('div');
+            newColCard.className = "bg-blue-50 p-4 rounded-lg border border-blue-100 mt-6";
+            newColCard.innerHTML = `
+                <h3 class="font-bold text-blue-800 mb-3"><i class="fa-solid fa-plus mr-1"></i> Add New College</h3>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <input type="text" id="new-col-name" placeholder="School Name (e.g., MIT)" class="border border-slate-200 rounded px-3 py-2 text-sm">
+                    <input type="text" id="new-col-domain" placeholder="Domain (e.g., mit.edu)" class="border border-slate-200 rounded px-3 py-2 text-sm">
+                    <div>
+                        <input type="text" id="new-col-lat" placeholder="Latitude (e.g., 42.36)" class="w-full border border-slate-200 rounded px-3 py-2 text-sm">
+                        <p class="text-[10px] text-slate-400 mt-1 pl-1">Right-click on Google Maps to find coordinates.</p>
+                    </div>
+                    <input type="text" id="new-col-lng" placeholder="Longitude (e.g., -71.09)" class="border border-slate-200 rounded px-3 py-2 text-sm h-fit">
+                </div>
+                <button onclick="addNewCollege()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm w-full font-medium transition-colors">Create College</button>
+            `;
+            container.appendChild(newColCard);
+        }
+
+        window.removeStudent = function(colIndex, studentIdx) {
+            editorData[colIndex].students.splice(studentIdx, 1);
+            renderEditor();
+        }
+
+        window.addStudent = function(colIndex) {
+            const input = document.getElementById(`add-student-input-${colIndex}`);
+            const name = input.value.trim();
+            if (name) {
+                editorData[colIndex].students.push(name);
+                renderEditor();
+            }
+        }
+
+        window.deleteCollege = function(colIndex) {
+            if (confirm(`Are you sure you want to remove ${editorData[colIndex].name} entirely?`)) {
+                editorData.splice(colIndex, 1);
+                renderEditor();
+            }
+        }
+
+        window.addNewCollege = function() {
+            const name = document.getElementById('new-col-name').value.trim();
+            const domain = document.getElementById('new-col-domain').value.trim();
+            const lat = parseFloat(document.getElementById('new-col-lat').value);
+            const lng = parseFloat(document.getElementById('new-col-lng').value);
+
+            if (!name || !domain || isNaN(lat) || isNaN(lng)) {
+                alert("Please fill out all fields with valid information. Make sure latitude and longitude are numbers.");
+                return;
+            }
+
+            editorData.push({ name, domain, lat, lng, students: [] });
+            
+            // Re-sort so new ones merge in nicely
+            editorData.sort((a, b) => a.name.localeCompare(b.name));
+            renderEditor();
+        }
+
+        function setupModals() {
+            // Edit Modal Logic
+            const editModal = document.getElementById('edit-modal');
+            const editModalPanel = document.getElementById('edit-modal-panel');
+            
+            document.getElementById('open-edit-modal-btn').addEventListener('click', () => {
+                editorData = JSON.parse(JSON.stringify(collegeData)); // Copy current data to editor
+                renderEditor();
+                editModal.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    editModal.classList.remove('opacity-0');
+                    editModalPanel.classList.remove('scale-95');
+                });
+            });
+
+            document.getElementById('edit-modal-close').addEventListener('click', () => {
+                editModal.classList.add('opacity-0');
+                editModalPanel.classList.add('scale-95');
+                setTimeout(() => editModal.classList.add('hidden'), 300);
+            });
+
+            document.getElementById('save-data-btn').addEventListener('click', () => {
+                // Save to localStorage and force reload the page to cleanly reset the map
+                localStorage.setItem('classOf2026Data', JSON.stringify(editorData));
+                location.reload(); 
+            });
+
+            document.getElementById('reset-data-btn').addEventListener('click', () => {
+                if (confirm("Are you sure you want to reset all data back to the original hardcoded list? You will lose all your manual edits.")) {
+                    localStorage.removeItem('classOf2026Data');
+                    location.reload();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
